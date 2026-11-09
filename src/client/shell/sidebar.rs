@@ -326,6 +326,7 @@ pub(crate) fn render_sidebar(
             rect,
             status,
             config.status_indicators,
+            config.spaces.separator.as_deref(),
             entry,
             rows,
             workspace.focused,
@@ -694,6 +695,7 @@ pub(in crate::client::shell) fn render_workspace_rows(
     area: Rect,
     status: crate::api::schema::AgentStatus,
     indicators: crate::config::StatusIndicatorStyle,
+    separator: Option<&str>,
     entry: &WorkspaceEntry,
     rows: Vec<Vec<crate::ui::ResolvedToken>>,
     focused: bool,
@@ -752,6 +754,7 @@ pub(in crate::client::shell) fn render_workspace_rows(
         });
         let spans = crate::ui::resolved_token_spans(
             row,
+            separator,
             (
                 status_icon(status, indicators),
                 Style::default().fg(status_color(status, palette)),

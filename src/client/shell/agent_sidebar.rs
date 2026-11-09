@@ -358,6 +358,7 @@ pub(super) fn render_agent_row(
         let mut spans = vec![ratatui::text::Span::raw(" ".repeat(indent))];
         spans.extend(crate::ui::resolved_token_spans(
             tokens,
+            config.agents.separator.as_deref(),
             icon,
             status_style,
             name_style,

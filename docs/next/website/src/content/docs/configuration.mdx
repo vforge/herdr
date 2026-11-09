@@ -436,6 +436,16 @@ Rules work with text-valued built-ins and custom `$name` tokens in Agent rows, `
 
 `row_gap` controls the blank terminal rows between entries, independently for the Agent and Space panels. It defaults to `0`, which packs entries together; set it to `1` to restore the previous spacing. It does not add spacing between the content lines declared in `rows`. Consecutive indented worktree children remain packed as one Space group.
 
+`separator` optionally replaces the text between visible tokens, independently for each panel. When omitted, Herdr uses `" · "`, except after the built-in `state_icon` or before `git_status`, where it uses `" "`. An explicit value replaces all these boundaries, including in `rows_by_agent` overrides. Use `" "` for plain spacing, `""` to join tokens directly, or another string such as `" | "`. Control characters (including tabs, newlines, and ANSI escapes) are rejected. Missing or hidden tokens do not leave extra separators; truncation accounts for the separator's terminal display width.
+
+```toml
+[ui.sidebar.agents]
+separator = " "
+
+[ui.sidebar.spaces]
+separator = " "
+```
+
 Override the complete Agent layout for a known agent under `rows_by_agent`:
 
 ```toml

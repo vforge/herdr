@@ -12,6 +12,19 @@ const MAX_SIDEBAR_ROWS: usize = 16;
 const MAX_SIDEBAR_TOKENS_PER_ROW: usize = 16;
 const DEFAULT_SIDEBAR_ROW_GAP: u16 = 0;
 
+fn deserialize_sidebar_separator<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = String::deserialize(deserializer)?;
+    if value.chars().any(char::is_control) {
+        return Err(serde::de::Error::custom(
+            "sidebar separator must not contain control characters",
+        ));
+    }
+    Ok(Some(value))
+}
+
 fn deserialize_sidebar_rows<'de, D, T>(deserializer: D) -> Result<Vec<Vec<T>>, D::Error>
 where
     D: serde::Deserializer<'de>,
@@ -422,6 +435,12 @@ where
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(default)]
 pub struct AgentsSidebarConfig {
+    #[serde(
+        default,
+        deserialize_with = "deserialize_sidebar_separator",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub separator: Option<String>,
     #[serde(deserialize_with = "deserialize_sidebar_rows")]
     pub rows: AgentSidebarRows,
     #[serde(default, deserialize_with = "deserialize_rows_by_agent")]
@@ -440,6 +459,7 @@ impl AgentsSidebarConfig {
 impl Default for AgentsSidebarConfig {
     fn default() -> Self {
         Self {
+            separator: None,
             rows: vec![
                 vec![
                     AgentSidebarToken::StateIcon,
@@ -458,6 +478,12 @@ impl Default for AgentsSidebarConfig {
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(default)]
 pub struct SpacesSidebarConfig {
+    #[serde(
+        default,
+        deserialize_with = "deserialize_sidebar_separator",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub separator: Option<String>,
     #[serde(deserialize_with = "deserialize_sidebar_rows")]
     pub rows: SpaceSidebarRows,
     pub row_gap: u16,
@@ -466,6 +492,7 @@ pub struct SpacesSidebarConfig {
 impl Default for SpacesSidebarConfig {
     fn default() -> Self {
         Self {
+            separator: None,
             rows: vec![
                 vec![SpaceSidebarToken::StateIcon, SpaceSidebarToken::Workspace],
                 vec![SpaceSidebarToken::Branch, SpaceSidebarToken::GitStatus],
@@ -485,6 +512,51 @@ pub struct SidebarConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sidebar_separator_defaults_to_legacy_spacing() {
+        let config: SidebarConfig = toml::from_str("").unwrap();
+        assert_eq!(config.agents.separator, None);
+        assert_eq!(config.spaces.separator, None);
+        assert_eq!(config, SidebarConfig::default());
+        let encoded = toml::to_string(&config).unwrap();
+        assert!(!encoded.contains("separator"));
+        assert_eq!(toml::from_str::<SidebarConfig>(&encoded).unwrap(), config);
+    }
+
+    #[test]
+    fn sidebar_separators_are_independent_and_round_trip() {
+        for separator in ["", " ", " | ", "界"] {
+            let input = format!(
+                "[ui.sidebar.agents]\nseparator = '{separator}'\n[ui.sidebar.spaces]\nseparator = ' / '\n"
+            );
+            let config: crate::config::Config = toml::from_str(&input).unwrap();
+            let sidebar = config.ui.sidebar;
+            assert_eq!(sidebar.agents.separator.as_deref(), Some(separator));
+            assert_eq!(sidebar.spaces.separator.as_deref(), Some(" / "));
+            let encoded = toml::to_string(&sidebar).unwrap();
+            assert_eq!(toml::from_str::<SidebarConfig>(&encoded).unwrap(), sidebar);
+        }
+        let config: SidebarConfig = toml::from_str("[agents]\nseparator = ' '").unwrap();
+        assert_eq!(config.spaces.separator, None);
+    }
+
+    #[test]
+    fn sidebar_separator_rejects_controls_and_non_strings() {
+        for section in ["agents", "spaces"] {
+            for value in [
+                r#""\n""#,
+                r#""\r""#,
+                r#""\t""#,
+                r#""\u001b[31m""#,
+                "1",
+                "false",
+            ] {
+                let input = format!("[{section}]\nseparator = {value}");
+                assert!(toml::from_str::<SidebarConfig>(&input).is_err(), "{input}");
+            }
+        }
+    }
 
     #[test]
     fn defaults_match_the_compact_agent_and_existing_space_layouts() {

@@ -177,7 +177,14 @@ pub(crate) fn space_rows(
         .collect()
 }
 
-pub(crate) fn separator(previous: &ResolvedToken, current: &ResolvedToken) -> &'static str {
+pub(crate) fn separator<'a>(
+    previous: &ResolvedToken,
+    current: &ResolvedToken,
+    configured: Option<&'a str>,
+) -> &'a str {
+    if let Some(separator) = configured {
+        return separator;
+    }
     if matches!(previous.kind, ResolvedTokenKind::StateIcon)
         || matches!(current.kind, ResolvedTokenKind::GitStatus { .. })
     {
@@ -191,6 +198,110 @@ pub(crate) fn separator(previous: &ResolvedToken, current: &ResolvedToken) -> &'
 mod tests {
     use super::*;
     use crate::config::{AgentSidebarToken, SpaceSidebarToken};
+
+    #[test]
+    fn sidebar_separator_preserves_legacy_exceptions_unless_overridden() {
+        let text = ResolvedToken::unstyled(ResolvedTokenKind::Custom("title".into()));
+        let icon = ResolvedToken::unstyled(ResolvedTokenKind::StateIcon);
+        let git = ResolvedToken::unstyled(ResolvedTokenKind::GitStatus {
+            ahead: 1,
+            behind: 0,
+        });
+        for (previous, current, expected) in [
+            (&text, &text, " · "),
+            (&icon, &text, " "),
+            (&text, &git, " "),
+        ] {
+            assert_eq!(separator(previous, current, None), expected);
+            for custom in ["", " ", " | ", "界"] {
+                assert_eq!(separator(previous, current, Some(custom)), custom);
+            }
+        }
+    }
+
+    #[test]
+    fn sidebar_separator_rendering_and_width_budget_agree() {
+        use ratatui::style::Style;
+        let row = vec![
+            ResolvedToken::unstyled(ResolvedTokenKind::Custom("A".into())),
+            ResolvedToken::unstyled(ResolvedTokenKind::Custom("B".into())),
+        ];
+        let palette = super::super::Palette::catppuccin();
+        for (custom, expected) in [
+            (None, "A · B"),
+            (Some(" "), "A B"),
+            (Some(""), "AB"),
+            (Some(" | "), "A | B"),
+            (Some("界"), "A界B"),
+        ] {
+            let width = super::super::display_width(expected);
+            for budget in 0..=width + 1 {
+                let spans = super::super::resolved_token_spans(
+                    &row,
+                    custom,
+                    ("*", Style::default()),
+                    Style::default(),
+                    Style::default(),
+                    Style::default(),
+                    Style::default(),
+                    &palette,
+                    budget,
+                );
+                let rendered = spans
+                    .iter()
+                    .map(|span| span.content.as_ref())
+                    .collect::<String>();
+                assert!(
+                    super::super::display_width(&rendered) <= budget,
+                    "{custom:?}, {budget}: {rendered}"
+                );
+                if budget >= width {
+                    assert_eq!(rendered, expected);
+                } else {
+                    assert_eq!(rendered, if budget == 0 { "" } else { "B" });
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn sidebar_separator_skips_missing_tokens_and_honors_agent_overrides() {
+        use ratatui::style::Style;
+        let config: AgentsSidebarConfig = toml::from_str(
+            r#"
+separator = " "
+rows = [["$missing"]]
+[rows_by_agent]
+claude = [["$logo", "$missing", "$title"]]
+"#,
+        )
+        .unwrap();
+        let mut entry = entry();
+        entry.canonical_agent = Some(crate::detect::Agent::Claude);
+        entry.tokens.insert("logo".into(), "C".into());
+        entry.tokens.insert("title".into(), "Title".into());
+        let rows = agent_rows(&config, context(&entry), "idle");
+        assert_eq!(rows.len(), 1);
+        let palette = super::super::Palette::catppuccin();
+        let spans = super::super::resolved_token_spans(
+            &rows[0],
+            config.separator.as_deref(),
+            ("*", Style::default()),
+            Style::default(),
+            Style::default(),
+            Style::default(),
+            Style::default(),
+            &palette,
+            40,
+        );
+        assert_eq!(
+            spans
+                .iter()
+                .map(|span| span.content.as_ref())
+                .collect::<String>(),
+            "C Title"
+        );
+    }
 
     struct Entry {
         workspace: String,
@@ -276,6 +387,7 @@ rows = [[{ token = "workspace", rules = [{ equals = "long-workspace-name", fg = 
         for width in [4, 40] {
             let spans = super::super::resolved_token_spans(
                 &rows[0],
+                config.separator.as_deref(),
                 ("*", theme),
                 theme,
                 theme,

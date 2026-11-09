@@ -473,6 +473,7 @@ pub(super) fn render_expanded(
                     nested,
                     status,
                     config.status_indicators,
+                    config.spaces.separator.as_deref(),
                     entry,
                     tokens,
                     endpoint_active && workspace.focused,

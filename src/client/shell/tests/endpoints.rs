@@ -1503,6 +1503,72 @@ fn aggregate_agents_use_configured_rows_machine_token_and_status_colors() {
 }
 
 #[test]
+fn sidebar_separators_reach_agent_and_space_panels_on_local_and_ssh() {
+    use crate::config::{AgentSidebarToken, SpaceSidebarToken};
+
+    for with_remote in [false, true] {
+        let mut config = Config::default();
+        config.ui.sidebar.agents.separator = Some(" ".into());
+        config.ui.sidebar.agents.rows = vec![vec![
+            AgentSidebarToken::Custom("logo".into()),
+            AgentSidebarToken::Custom("title".into()),
+        ]];
+        config.ui.sidebar.spaces.separator = Some(" / ".into());
+        config.ui.sidebar.spaces.rows = vec![vec![
+            SpaceSidebarToken::Custom("activity".into()),
+            SpaceSidebarToken::Workspace,
+        ]];
+        let mut state = ClientShellState::new(ClientShellConfig::from_config(&config));
+        let mut local = snapshot();
+        local.workspaces[0].label = "LocalRepo".into();
+        local.workspaces[0].tokens = vec![("activity".into(), "S".into())];
+        let mut local_agent = agent("local agent", AgentStatus::Idle, 1);
+        local_agent.tokens = vec![
+            ("logo".into(), "L".into()),
+            ("title".into(), "LocalTask".into()),
+        ];
+        local.agents = vec![local_agent];
+        state.set_snapshot(Box::new(local));
+        state.set_pane_surface(surface());
+        if with_remote {
+            let profile = remote_profile();
+            let endpoint_id = ClientEndpointId::Ssh(profile.id.clone());
+            state.set_endpoint_catalog(&[profile]);
+            state.set_endpoint_status(&endpoint_id, ClientEndpointStatus::Online);
+            let mut remote = snapshot();
+            remote.boot_id = "remote-boot".into();
+            remote.workspaces[0].label = "RemoteRepo".into();
+            remote.workspaces[0].tokens = vec![("activity".into(), "R".into())];
+            let mut remote_agent = agent("remote agent", AgentStatus::Idle, 1);
+            remote_agent.tokens = vec![
+                ("logo".into(), "R".into()),
+                ("title".into(), "RemoteTask".into()),
+            ];
+            remote.agents = vec![remote_agent];
+            state.set_endpoint_snapshot(&endpoint_id, Box::new(remote));
+        }
+        let frame = state.compose(106, 40).expect("custom sidebar separators");
+        let text = frame
+            .cells
+            .chunks(frame.width as usize)
+            .map(|row| {
+                row.iter()
+                    .map(|cell| cell.symbol.as_str())
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(text.contains("S / LocalRepo"), "frame: {text}");
+        assert!(text.contains("L LocalTask"), "frame: {text}");
+        assert!(!text.contains("L · LocalTask"), "frame: {text}");
+        if with_remote {
+            assert!(text.contains("R / RemoteRepo"), "frame: {text}");
+            assert!(text.contains("R RemoteTask"), "frame: {text}");
+        }
+    }
+}
+
+#[test]
 fn current_workspace_agent_view_excludes_same_workspace_id_on_other_machine() {
     use crate::api::schema::AgentStatus;
     use crate::config::AgentSidebarToken;
