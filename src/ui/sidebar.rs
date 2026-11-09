@@ -171,6 +171,12 @@ pub(crate) fn resolved_token_spans<'a>(
             }
         }
         for index in (0..resolved.len()).rev() {
+            if minimum_width(&active) <= max_width {
+                break;
+            }
+            active[index] = false;
+        }
+        for index in (0..resolved.len()).rev() {
             if flexible_widths[index] == 0 {
                 continue;
             }

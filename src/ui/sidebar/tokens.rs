@@ -265,6 +265,61 @@ mod tests {
     }
 
     #[test]
+    fn sidebar_separator_fixed_and_mixed_rows_fit_the_width_budget() {
+        use ratatui::style::Style;
+        let icon = ResolvedToken::unstyled(ResolvedTokenKind::StateIcon);
+        let git = ResolvedToken::unstyled(ResolvedTokenKind::GitStatus {
+            ahead: 1,
+            behind: 2,
+        });
+        let text = ResolvedToken::unstyled(ResolvedTokenKind::Custom("Repo".into()));
+        let palette = super::super::Palette::catppuccin();
+        for row in [
+            vec![icon.clone(), git.clone()],
+            vec![icon.clone(), text, git.clone()],
+            vec![icon],
+            vec![git],
+        ] {
+            for separator in [
+                None,
+                Some(""),
+                Some(" "),
+                Some("--------------------"),
+                Some("界界界界界界界界界界"),
+            ] {
+                for budget in 0..=40 {
+                    let spans = super::super::resolved_token_spans(
+                        &row,
+                        separator,
+                        ("*", Style::default()),
+                        Style::default(),
+                        Style::default(),
+                        Style::default(),
+                        Style::default(),
+                        &palette,
+                        budget,
+                    );
+                    let rendered = spans
+                        .iter()
+                        .map(|span| span.content.as_ref())
+                        .collect::<String>();
+                    assert!(
+                        super::super::display_width(&rendered) <= budget,
+                        "row: {row:?}, separator: {separator:?}, budget: {budget}, rendered: {rendered:?}"
+                    );
+                    if budget >= 40 {
+                        assert!(rendered.contains('*') || rendered.contains("↑1 ↓2"));
+                    }
+                    if let Some(separator) = separator.filter(|value| !value.is_empty()) {
+                        assert!(!rendered.starts_with(separator));
+                        assert!(!rendered.ends_with(separator));
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
     fn sidebar_separator_skips_missing_tokens_and_honors_agent_overrides() {
         use ratatui::style::Style;
         let config: AgentsSidebarConfig = toml::from_str(

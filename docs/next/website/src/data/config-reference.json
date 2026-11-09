@@ -1064,7 +1064,7 @@
           "key": "ui.sidebar.agents.separator",
           "type": "string",
           "default": "unset (automatic)",
-          "description": "Text between visible Agent sidebar tokens, including rows_by_agent overrides. Unset preserves automatic spacing: a space after state_icon or before git_status, otherwise a middle dot surrounded by spaces. An explicit string replaces every boundary; use a space for plain spacing or an empty string for no separator. Control characters are rejected. Expanded desktop sidebar only."
+          "description": "Text between visible Agent sidebar tokens, including rows_by_agent overrides. When unset, Herdr uses a space after state_icon and a middle dot surrounded by spaces elsewhere. Set a space for plain spacing or an empty string for no separator. Control characters are rejected. Applies to the expanded desktop sidebar."
         },
         {
           "key": "ui.sidebar.agents.row_gap",
